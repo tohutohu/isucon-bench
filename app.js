@@ -1,7 +1,7 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const bodyParser = require('body-parser');
-const exec = require('child_process').exec
+const spawn = require('child_process').spawn
 const app = express();
 
 app.set('view engine', 'ejs');
@@ -14,9 +14,9 @@ app.use(cookieParser());
 
 let benchNow = false
 
-const startBench = (ip, cb) => {
+const startBench = (ip) => {
   console.log(ip, ' bench start')
-  return exec(`/opt/go/bin/benchmarker -t http://${ip}/ -u /opt/go/src/github.com/catatsuy/private-isu/benchmarker/userdata`, cb)
+  return spawn(`/home/isucon/isucon6q/isucon6q-bench` ,["-datadir", "/home/isucon/isucon6q/data", "-target", `http://${ip}`])
 }
 
 app.get('/test', (req, res) => res.send('po'))
@@ -30,13 +30,25 @@ app.post('/bench', (req, res) => {
     res.json({benchNow, message: 'bench now'})
     return
   }
+  res.writeHead(200, {'Content-Type': 'text/event-stream', 'Cache-control': 'no-cache'})
+  console.log(req.body)
   const ip = req.body.ip
   benchNow = true
-  startBench(ip, (err, stdout) => {
-    console.log(err, stdout)
-    const po = stdout.match(/{.*}/)
-    res.send(JSON.parse(po))
+  const ps = startBench(ip) 
+
+  ps.on('exit', code => {
+    console.log('end bench')
+    res.end()
     benchNow = false
+  })
+
+  ps.stdout.on('data', data => {
+    res.write(data.toString())
+    console.log(data.toString())
+  })
+  ps.stderr.on('data', data => {
+    res.write(data.toString())
+    console.log(data.toString())
   })
 })
 
